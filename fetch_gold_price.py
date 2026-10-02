@@ -8,19 +8,23 @@ from bs4 import BeautifulSoup
 URL = "https://www.goodreturns.in/gold-rates/bangalore.html"
 JSON_FILE = "bangalore_gold_prices.json"
 
+# Added more robust headers to mimic a real browser
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/118.0.0.0 Safari/537.36"
-    )
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
 }
 
 def clean_price(text: str):
-    """Extracts only the numbers from the table cell."""
+    # Look for numbers and ensure it's a realistic 1-gram price (between 4,000 and 15,000)
     match = re.search(r'[\d,]+', text)
     if match:
-        return float(match.group(0).replace(",", ""))
+        try:
+            val = float(match.group(0).replace(",", ""))
+            if 4000 < val < 15000:
+                return val
+        except ValueError:
+            pass
     return None
 
 def fetch_gold_prices():
@@ -29,31 +33,40 @@ def fetch_gold_prices():
 
     soup = BeautifulSoup(response.text, "html.parser")
     
-    price_22k = None
-    price_24k = None
-
-    # Resilient Strategy: Scan all tables across the entire page for '1 gram'
+    # Debugging: Print page title to check if GitHub Actions is getting blocked by Cloudflare
+    page_title = soup.title.string.strip() if soup.title else "No Title"
+    print(f"Page Title: {page_title}")
+    if "moment" in page_title.lower() or "security" in page_title.lower():
+        print("WARNING: GitHub Actions IP is blocked by bot protection.")
+    
     found_prices = set()
     
     for table in soup.find_all("table"):
         for row in table.find_all("tr"):
-            cols = [col.text.strip().lower() for col in row.find_all(["td", "th"])]
-            # If the row mentions '1 gram', parse the price next to it
-            if len(cols) >= 2 and "1 gram" in cols[0]:
-                val = clean_price(cols[1])
-                if val:
-                    found_prices.add(val)
+            cols = [col.get_text(strip=True).lower() for col in row.find_all(["td", "th"])]
+            if not cols:
+                continue
+            
+            # If the row contains "1 gram", extract ALL prices from every column in that row
+            if "1 gram" in cols[0] or "1g" in cols[0]:
+                for col in cols[1:]:
+                    val = clean_price(col)
+                    if val:
+                        found_prices.add(val)
     
-    # 22K gold is always cheaper than 24K. 
-    # Sort the unique prices we found and assign the two highest values.
     sorted_prices = sorted(list(found_prices))
     
+    price_22k = None
+    price_24k = None
+    
+    # 22K is always the lower price, 24K is the higher
     if len(sorted_prices) >= 2:
         price_22k = sorted_prices[0]
         price_24k = sorted_prices[-1] 
 
     if not price_22k or not price_24k:
-        print("Warning: Could not find both 22K and 24K prices. Website structure may have changed.")
+        print("Warning: Could not find both 22K and 24K prices.")
+        print(f"Valid prices found in tables: {sorted_prices}")
     
     return {
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
