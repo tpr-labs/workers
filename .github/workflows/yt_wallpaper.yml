@@ -1,9 +1,7 @@
-
 name: Generate YouTube Lockscreen
 
 on:
   schedule:
-    # Runs every hour from 7:00 AM to 11:00 PM IST (01:30 to 17:30 UTC)
     - cron: '30 1-17 * * *'
   workflow_dispatch:
 
@@ -28,10 +26,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fonts-dejavu
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 pillow
+          pip install requests pillow
 
       - name: Run script to create wallpaper
         env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
         run: python generate_yt_wallpaper.py
 
