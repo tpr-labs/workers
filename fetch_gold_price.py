@@ -1,98 +1,84 @@
-import requests
-from bs4 import BeautifulSoup
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+import requests
+from bs4 import BeautifulSoup
 
-# Using GoodReturns as it has a historically stable structure for gold prices
 URL = "https://www.goodreturns.in/gold-rates/bangalore.html"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
 JSON_FILE = "bangalore_gold_prices.json"
 
-def extract_prices(html_content):
-    """
-    Parses the HTML content to find 22K and 24K 1-gram gold prices.
-    Returns a dictionary with the extracted prices.
-    """
-    soup = BeautifulSoup(html_content, "html.parser")
-    prices = {"22k": None, "24k": None}
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/118.0.0.0 Safari/537.36"
+    )
+}
 
-    try:
-        # Search all tables to locate the price grids
-        tables = soup.find_all("table")
-        for table in tables:
-            text = table.get_text(separator=" ").lower()
-            
-            # Check if this table contains gold data
-            if "1 gram" in text and ("22" in text or "24" in text):
-                rows = table.find_all("tr")
-                for row in rows:
-                    cols = row.find_all(["td", "th"])
-                    row_text = " ".join([c.get_text(strip=True) for c in cols]).lower()
-                    
-                    # Target the 1-gram row specifically
-                    if "1 gram" in row_text:
-                        # Extract all numbers that look like valid INR prices (e.g., 6,500 or 72,000)
-                        matches = re.findall(r'₹?\s*([\d,]+(?:\.\d{1,2})?)', row_text)
-                        
-                        for match in matches:
-                            val = float(match.replace(',', ''))
-                            # Sanity check: 1 gram gold is roughly between 4000 and 25000 INR
-                            if 4000 < val < 25000:
-                                if "22" in text and not prices["22k"]:
-                                    prices["22k"] = val
-                                elif "24" in text and not prices["24k"]:
-                                    prices["24k"] = val
-    except Exception as e:
-        print(f"Error while parsing HTML table: {e}")
+def clean_price(text: str):
+    """Extracts only the numbers from the table cell."""
+    match = re.search(r'[\d,]+', text)
+    if match:
+        return float(match.group(0).replace(",", ""))
+    return None
 
-    return prices
+def fetch_gold_prices():
+    response = requests.get(URL, headers=HEADERS, timeout=15)
+    response.raise_for_status()
 
-def main():
-    print(f"Fetching gold prices from {URL}...")
+    soup = BeautifulSoup(response.text, "html.parser")
     
-    try:
-        response = requests.get(URL, headers=HEADERS)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        print(f"Failed to fetch webpage: {e}")
-        return
+    price_22k = None
+    price_24k = None
 
-    # Extract the prices from the fetched HTML
-    prices = extract_prices(response.text)
+    # Resilient Strategy: Scan all tables across the entire page for '1 gram'
+    found_prices = set()
+    
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cols = [col.text.strip().lower() for col in row.find_all(["td", "th"])]
+            # If the row mentions '1 gram', parse the price next to it
+            if len(cols) >= 2 and "1 gram" in cols[0]:
+                val = clean_price(cols[1])
+                if val:
+                    found_prices.add(val)
+    
+    # 22K gold is always cheaper than 24K. 
+    # Sort the unique prices we found and assign the two highest values.
+    sorted_prices = sorted(list(found_prices))
+    
+    if len(sorted_prices) >= 2:
+        price_22k = sorted_prices[0]
+        price_24k = sorted_prices[-1] 
 
-    if not prices["22k"] or not prices["24k"]:
+    if not price_22k or not price_24k:
         print("Warning: Could not find both 22K and 24K prices. Website structure may have changed.")
-    else:
-        print(f"Successfully Fetched -> 22K: ₹{prices['22k']}, 24K: ₹{prices['24k']}")
+    
+    return {
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "price_22k_inr": price_22k,
+        "price_24k_inr": price_24k
+    }
 
-    data = []
-    # If the JSON file already exists, read its contents first
+def update_json_file(data: dict):
+    records = []
     if os.path.exists(JSON_FILE):
         try:
             with open(JSON_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            print("Existing JSON file was corrupt. Starting fresh.")
-            data = []
+                records = json.load(f)
+                if not isinstance(records, list):
+                    records = [records]
+        except (json.JSONDecodeError, IOError):
+            records = []
 
-    # Create today's entry
-    today_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {
-        "date": today_date,
-        "price_22k_inr": prices["22k"],
-        "price_24k_inr": prices["24k"]
-    }
-    data.append(entry)
+    records.append(data)
 
-    # Write the updated array back to the JSON file
     with open(JSON_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
-        
-    print(f"Successfully saved data to {JSON_FILE}")
+        json.dump(records, f, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
-    main()
+    print(f"Fetching gold prices from {URL}...")
+    gold_data = fetch_gold_prices()
+    update_json_file(gold_data)
+    print(f"Successfully saved data to {JSON_FILE}")
