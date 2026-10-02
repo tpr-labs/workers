@@ -40,7 +40,7 @@ def fetch_gold_prices():
             if not cols:
                 continue
             
-            # The website now uses just "1" in the Gram column
+            # The website uses "1", "1 gram", "1g", or "1 gm" in the weight column
             if cols[0] in ["1", "1 gram", "1g", "1 gm"]:
                 for col in cols[1:]:
                     val = clean_price(col)
@@ -68,20 +68,9 @@ def fetch_gold_prices():
     }
 
 def update_json_file(data: dict):
-    records = []
-    if os.path.exists(JSON_FILE):
-        try:
-            with open(JSON_FILE, "r", encoding="utf-8") as f:
-                records = json.load(f)
-                if not isinstance(records, list):
-                    records = [records]
-        except (json.JSONDecodeError, IOError):
-            records = []
-
-    records.append(data)
-
+    # Overwrite the file completely with only the latest data object
     with open(JSON_FILE, "w", encoding="utf-8") as f:
-        json.dump(records, f, indent=2, ensure_ascii=False)
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     print(f"Fetching gold prices from {URL}...")
