@@ -18,5 +18,10 @@
     "date": "2026-10-02 08:46:41",
     "price_22k_inr": null,
     "price_24k_inr": null
+  },
+  {
+    "date": "2026-10-02 08:50:38",
+    "price_22k_inr": 13775.0,
+    "price_24k_inr": 15028.0
   }
 ]
