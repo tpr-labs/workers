@@ -1,0 +1,40 @@
+name: Generate Daily Wallpaper
+
+on:
+  schedule:
+    # 00:30 UTC = 6:00 AM IST daily
+    - cron: '30 0 * * *'
+  workflow_dispatch: # Allows you to run it manually
+
+permissions:
+  contents: write
+
+jobs:
+  build-wallpaper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies and system fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 pillow
+
+      - name: Run script to create wallpaper
+        run: python generate_wallpaper.py
+
+      - name: Commit and push image
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add daily_lockscreen.png
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update daily lockscreen [skip ci]" && git push)
