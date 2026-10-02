@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup
 URL = "https://www.goodreturns.in/gold-rates/bangalore.html"
 JSON_FILE = "bangalore_gold_prices.json"
 
-# Added more robust headers to mimic a real browser
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -16,12 +15,12 @@ HEADERS = {
 }
 
 def clean_price(text: str):
-    # Look for numbers and ensure it's a realistic 1-gram price (between 4,000 and 15,000)
-    match = re.search(r'[\d,]+', text)
+    # Extract only the main price before any daily change brackets like "(-33)"
+    match = re.search(r'^[\s₹]*([\d,]+)', text)
     if match:
         try:
-            val = float(match.group(0).replace(",", ""))
-            if 4000 < val < 15000:
+            val = float(match.group(1).replace(",", ""))
+            if 4000 < val < 25000:
                 return val
         except ValueError:
             pass
@@ -33,12 +32,6 @@ def fetch_gold_prices():
 
     soup = BeautifulSoup(response.text, "html.parser")
     
-    # Debugging: Print page title to check if GitHub Actions is getting blocked by Cloudflare
-    page_title = soup.title.string.strip() if soup.title else "No Title"
-    print(f"Page Title: {page_title}")
-    if "moment" in page_title.lower() or "security" in page_title.lower():
-        print("WARNING: GitHub Actions IP is blocked by bot protection.")
-    
     found_prices = set()
     
     for table in soup.find_all("table"):
@@ -47,8 +40,8 @@ def fetch_gold_prices():
             if not cols:
                 continue
             
-            # If the row contains "1 gram", extract ALL prices from every column in that row
-            if "1 gram" in cols[0] or "1g" in cols[0]:
+            # The website now uses just "1" in the Gram column
+            if cols[0] in ["1", "1 gram", "1g", "1 gm"]:
                 for col in cols[1:]:
                     val = clean_price(col)
                     if val:
@@ -59,10 +52,10 @@ def fetch_gold_prices():
     price_22k = None
     price_24k = None
     
-    # 22K is always the lower price, 24K is the higher
+    # 24K is the most expensive, 22K is the second most expensive (ignoring 18K)
     if len(sorted_prices) >= 2:
-        price_22k = sorted_prices[0]
-        price_24k = sorted_prices[-1] 
+        price_24k = sorted_prices[-1]
+        price_22k = sorted_prices[-2] 
 
     if not price_22k or not price_24k:
         print("Warning: Could not find both 22K and 24K prices.")
