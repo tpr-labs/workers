@@ -1,5 +1,6 @@
 import os
 import requests
+from datetime import datetime, timezone, timedelta
 from PIL import Image, ImageDraw, ImageFont
 
 def get_subscriber_count():
@@ -25,24 +26,44 @@ def get_subscriber_count():
         
     return "---"
 
+def get_date_string():
+    # Lock timezone to IST (UTC+5:30) so days don't flip early
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(ist)
+    
+    current_day = now.day
+    
+    # Calculate days left in the year
+    end_of_year = datetime(now.year, 12, 31, tzinfo=ist)
+    days_left = (end_of_year.date() - now.date()).days
+    
+    return f"{current_day} | {days_left}"
+
 def create_wallpaper():
     sub_count = get_subscriber_count()
+    date_str = get_date_string()
     
     width, height = 1080, 2400
 
+    # Pure OLED black
     img = Image.new("RGB", (width, height), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
+        # Using a slightly smaller font for the date indicator so it stacks nicely
+        font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 35)
+        font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
     except IOError:
-        font = ImageFont.load_default()
+        font_date = font_sub = ImageFont.load_default()
 
     center_x = width // 2
-    draw.text((center_x, 1875), sub_count, fill=(255, 255, 255), font=font, anchor="mm")
+    
+    # Stacked vertically right above the fingerprint sensor
+    draw.text((center_x, 1800), date_str, fill=(255, 255, 255), font=font_date, anchor="mm")
+    draw.text((center_x, 1875), sub_count, fill=(255, 255, 255), font=font_sub, anchor="mm")
 
     img.save("daily_lockscreen.png")
-    print(f"Wallpaper generated successfully with sub count: {sub_count}")
+    print(f"Wallpaper generated. Date string: {date_str}, Sub count: {sub_count}")
 
 if __name__ == "__main__":
     create_wallpaper()
