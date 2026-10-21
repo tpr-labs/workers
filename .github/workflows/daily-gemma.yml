@@ -1,64 +1,4 @@
 
-name: Daily Gemma 4 AI
-
-on:
-  schedule:
-    - cron: "0 1 * * *" # Daily at 06:30 IST
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-concurrency:
-  group: daily-gemma
-  cancel-in-progress: false
-
-jobs:
-  generate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Check runner resources
-        run: |
-          echo "=== CPU ==="
-          nproc
-          echo "=== Memory ==="
-          free -h
-          echo "=== Disk ==="
-          df -h /
-
-      - name: Install Ollama
-        run: |
-          set -euo pipefail
-          curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve > /tmp/ollama.log 2>&1 &
-
-          for i in {1..30}; do
-            if curl -fsS \
-              http://localhost:11434/api/tags >/dev/null; then
-              break
-            fi
-            if [ "$i" -eq 30 ]; then
-              cat /tmp/ollama.log
-              exit 1
-            fi
-            sleep 2
-          done
-
-      - name: Pull Gemma 4 E2B Q4
-        run: |
-          set -euo pipefail
-
-          # Use the explicitly quantized model tag.
-          ollama pull gemma4:e2b-it-q4_K_M
-
-          echo "=== Disk after model download ==="
-          df -h /
-
       - name: Generate daily insight
         run: |
           set -euo pipefail
@@ -66,26 +6,64 @@ jobs:
           cat > /tmp/request.json <<'JSON'
           {
             "model": "gemma4:e2b-it-q4_K_M",
-            "prompt": "Create today's software engineer dashboard insight. Return a JSON object with exactly these string fields: quote, theme, engineering_tip, coding_challenge. Make the quote original, the theme concise, the tip practical, and the challenge solvable in about 10 minutes. Output only JSON.",
+            "prompt": "Generate a concise software engineer dashboard insight. Return a JSON object with exactly four non-empty string fields: quote, theme, engineering_tip, coding_challenge. The challenge should take about 10 minutes. Return valid JSON only.",
             "format": "json",
             "stream": false,
             "options": {
-              "temperature": 0.8,
+              "temperature": 0.7,
               "num_predict": 300,
               "num_ctx": 2048
             }
           }
           JSON
 
-          curl --fail --silent --show-error \
+          echo "Generating with Ollama..."
+
+          if ! curl -fsS \
             --max-time 600 \
             http://localhost:11434/api/generate \
             -H "Content-Type: application/json" \
             --data-binary @/tmp/request.json \
-            > /tmp/response.json
+            -o /tmp/response.json; then
+            echo "Ollama API request failed."
+            cat /tmp/response.json 2>/dev/null || true
+            cat /tmp/ollama.log || true
+            exit 1
+          fi
 
-          jq -er '.response | fromjson' \
-            /tmp/response.json > daily.json
+          echo "=== Ollama response metadata ==="
+          jq '{
+            error: .error,
+            done: .done,
+            total_duration: .total_duration,
+            eval_count: .eval_count,
+            response_type: (.response | type),
+            response_length: ((.response // "") | tostring | length)
+          }' /tmp/response.json
+
+          if jq -e '.error != null' /tmp/response.json >/dev/null; then
+            echo "Ollama returned an error:"
+            jq -r '.error' /tmp/response.json
+            exit 1
+          fi
+
+          # Ollama's format=json returns generated JSON as a string.
+          # Handle either that format or a direct JSON object.
+          jq -e '
+            if (.response | type) == "string" then
+              .response | fromjson
+            elif (.response | type) == "object" then
+              .response
+            else
+              error("Missing or invalid response field")
+            end
+          ' /tmp/response.json > daily.json || {
+            echo "Could not parse generated JSON. Response structure:"
+            jq 'del(.response)' /tmp/response.json
+            echo "Response text, if any:"
+            jq -r '.response // "<empty>"' /tmp/response.json
+            exit 1
+          }
 
           jq -e '
             type == "object" and
@@ -95,27 +73,8 @@ jobs:
             (.coding_challenge | type == "string" and length > 0)
           ' daily.json >/dev/null
 
-          # Normalize JSON formatting.
           jq -S . daily.json > daily.tmp
           mv daily.tmp daily.json
 
           echo "=== Generated output ==="
           cat daily.json
-
-      - name: Commit generated output
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add daily.json
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-
-          git commit -m "chore: update daily Gemma insight"
-          git push
