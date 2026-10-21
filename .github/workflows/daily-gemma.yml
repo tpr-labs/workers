@@ -1,0 +1,121 @@
+
+name: Daily Gemma 4 AI
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # Daily at 06:30 IST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-gemma
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check runner resources
+        run: |
+          echo "=== CPU ==="
+          nproc
+          echo "=== Memory ==="
+          free -h
+          echo "=== Disk ==="
+          df -h /
+
+      - name: Install Ollama
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve > /tmp/ollama.log 2>&1 &
+
+          for i in {1..30}; do
+            if curl -fsS \
+              http://localhost:11434/api/tags >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              cat /tmp/ollama.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Pull Gemma 4 E2B Q4
+        run: |
+          set -euo pipefail
+
+          # Use the explicitly quantized model tag.
+          ollama pull gemma4:e2b-it-q4_K_M
+
+          echo "=== Disk after model download ==="
+          df -h /
+
+      - name: Generate daily insight
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/request.json <<'JSON'
+          {
+            "model": "gemma4:e2b-it-q4_K_M",
+            "prompt": "Create today's software engineer dashboard insight. Return a JSON object with exactly these string fields: quote, theme, engineering_tip, coding_challenge. Make the quote original, the theme concise, the tip practical, and the challenge solvable in about 10 minutes. Output only JSON.",
+            "format": "json",
+            "stream": false,
+            "options": {
+              "temperature": 0.8,
+              "num_predict": 300,
+              "num_ctx": 2048
+            }
+          }
+          JSON
+
+          curl --fail --silent --show-error \
+            --max-time 600 \
+            http://localhost:11434/api/generate \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/request.json \
+            > /tmp/response.json
+
+          jq -er '.response | fromjson' \
+            /tmp/response.json > daily.json
+
+          jq -e '
+            type == "object" and
+            (.quote | type == "string" and length > 0) and
+            (.theme | type == "string" and length > 0) and
+            (.engineering_tip | type == "string" and length > 0) and
+            (.coding_challenge | type == "string" and length > 0)
+          ' daily.json >/dev/null
+
+          # Normalize JSON formatting.
+          jq -S . daily.json > daily.tmp
+          mv daily.tmp daily.json
+
+          echo "=== Generated output ==="
+          cat daily.json
+
+      - name: Commit generated output
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add daily.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: update daily Gemma insight"
+          git push
