@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import calendar
 from datetime import datetime, timezone, timedelta
@@ -27,46 +28,67 @@ def get_subscriber_count():
         
     return "---"
 
-def get_date_string():
-    # Lock timezone to IST (UTC+5:30)
-    ist = timezone(timedelta(hours=5, minutes=30))
-    now = datetime.now(ist)
-    
-    # Calculate days left in the current month
+def get_date_string(now):
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     days_left_month = days_in_month - now.day
     
-    # Calculate days left in the year
-    end_of_year = datetime(now.year, 12, 31, tzinfo=ist)
+    end_of_year = datetime(now.year, 12, 31, tzinfo=now.tzinfo)
     days_left_year = (end_of_year.date() - now.date()).days
     
     return f"{days_left_month} | {days_left_year}"
 
+def get_daily_quote(now):
+    try:
+        with open("quotes.json", "r") as f:
+            quotes = json.load(f)
+        
+        if not quotes:
+            return ""
+            
+        # Get the current day of the year (1-365/366)
+        day_of_year = now.timetuple().tm_yday
+        
+        # Modulo ensures it loops cleanly over the list length forever
+        quote_index = (day_of_year - 1) % len(quotes)
+        return quotes[quote_index]
+        
+    except FileNotFoundError:
+        print("quotes.json not found.")
+        return ""
+    except Exception as e:
+        print("Error reading quotes:", e)
+        return ""
+
 def create_wallpaper():
+    # Lock timezone to IST (UTC+5:30)
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(ist)
+
     sub_count = get_subscriber_count()
-    date_str = get_date_string()
+    date_str = get_date_string(now)
+    quote_str = get_daily_quote(now)
     
     width, height = 1080, 2400
-
-    # Pure OLED black
     img = Image.new("RGB", (width, height), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
     try:
-        # Using a slightly smaller font for the date indicator so it stacks nicely
+        # Load fonts
+        font_quote = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
         font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 35)
         font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
     except IOError:
-        font_date = font_sub = ImageFont.load_default()
+        font_quote = font_date = font_sub = ImageFont.load_default()
 
     center_x = width // 2
     
-    # Stacked vertically right above the fingerprint sensor
+    # Vertically stacked layout
+    draw.text((center_x, 1725), quote_str, fill=(180, 180, 180), font=font_quote, anchor="mm")
     draw.text((center_x, 1800), date_str, fill=(255, 255, 255), font=font_date, anchor="mm")
     draw.text((center_x, 1875), sub_count, fill=(255, 255, 255), font=font_sub, anchor="mm")
 
     img.save("daily_lockscreen.png")
-    print(f"Wallpaper generated. Counters: {date_str}, Sub count: {sub_count}")
+    print(f"Wallpaper generated. Quote: '{quote_str}', Counters: {date_str}, Sub count: {sub_count}")
 
 if __name__ == "__main__":
     create_wallpaper()
