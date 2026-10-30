@@ -29,9 +29,11 @@ def get_subscriber_count():
     return "---"
 
 def get_date_string(now):
+    # Calculate days left in the current month
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     days_left_month = days_in_month - now.day
     
+    # Calculate days left in the year
     end_of_year = datetime(now.year, 12, 31, tzinfo=now.tzinfo)
     days_left_year = (end_of_year.date() - now.date()).days
     
@@ -45,7 +47,10 @@ def get_daily_quote(now):
         if not quotes:
             return ""
             
+        # Get the current day of the year (1-365/366)
         day_of_year = now.timetuple().tm_yday
+        
+        # Modulo ensures it loops cleanly over the list length forever
         quote_index = (day_of_year - 1) % len(quotes)
         return quotes[quote_index]
         
@@ -66,26 +71,29 @@ def create_wallpaper():
     quote_str = get_daily_quote(now)
     
     width, height = 1080, 2400
+    
+    # Pure OLED black background
     img = Image.new("RGB", (width, height), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Load custom Matrix / Nothing font if available, else fallback to Monospace
+    # Load custom Matrix / Nothing font for ALL items, maintaining relative sizes
     try:
         font_quote = ImageFont.truetype("matrix.ttf", 35)
         font_date = ImageFont.truetype("matrix.ttf", 45)
         font_sub = ImageFont.truetype("matrix.ttf", 60)
     except IOError:
+        print("Warning: matrix.ttf not found. Falling back to system monospace font.")
         try:
-            # Fallback to Ubuntu's default monospace terminal font
-            font_quote = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 30)
-            font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 40)
-            font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 55)
+            # Fallback to Ubuntu's default monospace terminal font if matrix.ttf is missing
+            font_quote = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 35)
+            font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 45)
+            font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 60)
         except IOError:
             font_quote = font_date = font_sub = ImageFont.load_default()
 
     center_x = width // 2
     
-    # Vertically stacked layout - adjusted spacing for larger matrix fonts
+    # Vertically stacked layout 
     draw.text((center_x, 1720), quote_str, fill=(180, 180, 180), font=font_quote, anchor="mm")
     draw.text((center_x, 1800), date_str, fill=(255, 255, 255), font=font_date, anchor="mm")
     draw.text((center_x, 1880), sub_count, fill=(255, 255, 255), font=font_sub, anchor="mm")
