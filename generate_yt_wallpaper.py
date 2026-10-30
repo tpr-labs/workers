@@ -45,10 +45,7 @@ def get_daily_quote(now):
         if not quotes:
             return ""
             
-        # Get the current day of the year (1-365/366)
         day_of_year = now.timetuple().tm_yday
-        
-        # Modulo ensures it loops cleanly over the list length forever
         quote_index = (day_of_year - 1) % len(quotes)
         return quotes[quote_index]
         
@@ -72,20 +69,26 @@ def create_wallpaper():
     img = Image.new("RGB", (width, height), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
+    # Load custom Matrix / Nothing font if available, else fallback to Monospace
     try:
-        # Load fonts
-        font_quote = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
-        font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 35)
-        font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
+        font_quote = ImageFont.truetype("matrix.ttf", 35)
+        font_date = ImageFont.truetype("matrix.ttf", 45)
+        font_sub = ImageFont.truetype("matrix.ttf", 60)
     except IOError:
-        font_quote = font_date = font_sub = ImageFont.load_default()
+        try:
+            # Fallback to Ubuntu's default monospace terminal font
+            font_quote = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 30)
+            font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 40)
+            font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 55)
+        except IOError:
+            font_quote = font_date = font_sub = ImageFont.load_default()
 
     center_x = width // 2
     
-    # Vertically stacked layout
-    draw.text((center_x, 1725), quote_str, fill=(180, 180, 180), font=font_quote, anchor="mm")
+    # Vertically stacked layout - adjusted spacing for larger matrix fonts
+    draw.text((center_x, 1720), quote_str, fill=(180, 180, 180), font=font_quote, anchor="mm")
     draw.text((center_x, 1800), date_str, fill=(255, 255, 255), font=font_date, anchor="mm")
-    draw.text((center_x, 1875), sub_count, fill=(255, 255, 255), font=font_sub, anchor="mm")
+    draw.text((center_x, 1880), sub_count, fill=(255, 255, 255), font=font_sub, anchor="mm")
 
     img.save("daily_lockscreen.png")
     print(f"Wallpaper generated. Quote: '{quote_str}', Counters: {date_str}, Sub count: {sub_count}")
