@@ -70,64 +70,64 @@ def create_wallpaper():
 
     try:
         # Loading Courier New font
-        font_quote = ImageFont.truetype("cour.ttf", 32) # Slightly smaller to ensure long quotes fit 1080px
-        font_data = ImageFont.truetype("cour.ttf", 45)  # Both Date and Sub count use size 45
+        font_quote = ImageFont.truetype("cour.ttf", 32)
+        font_data = ImageFont.truetype("cour.ttf", 36)  # Reduced from 45 for a smaller look
     except IOError:
         print("Warning: cour.ttf not found. Falling back to system monospace font.")
         try:
             font_quote = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 32)
-            font_data = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 45)
+            font_data = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 36)
         except IOError:
             font_quote = font_data = ImageFont.load_default()
 
     center_x = width // 2
     
     # 1. Draw Quote
-    draw.text((center_x, 1715), quote_str, fill=(180, 180, 180), font=font_quote, anchor="mm")
+    draw.text((center_x, 1720), quote_str, fill=(180, 180, 180), font=font_quote, anchor="mm")
 
-    # 2. Wireframe Container Box Metrics
+    # 2. Reduced Wireframe Container Box Metrics (Tighter box)
     box_y_top = 1765
-    box_y_bottom = 1855
-    cy = (box_y_top + box_y_bottom) // 2 # Center Y of the box (1810)
+    box_y_bottom = 1840 # Reduced from 1855 (75px tall instead of 90px)
+    cy = (box_y_top + box_y_bottom) // 2 
     
-    box_width = 900
+    box_width = 750 # Reduced from 900 (Much tighter horizontally)
     box_left = center_x - (box_width // 2)
     box_right = center_x + (box_width // 2)
     
-    # Draw the main outer box and middle divider line (Soft grey to let white text pop)
+    # Draw the main outer box and middle divider line
     box_color = (130, 130, 130)
     draw.rectangle([box_left, box_y_top, box_right, box_y_bottom], outline=box_color, width=2)
     draw.line([center_x, box_y_top, center_x, box_y_bottom], fill=box_color, width=2)
 
-    # 3. Left Section: Calendar and Date
-    left_center_x = box_left + (box_width // 4) # Middle of the left box
+    # 3. Left Section: Calendar and Date (Slightly smaller, tighter spacing)
+    left_center_x = box_left + (box_width // 4)
     
     bbox_date = draw.textbbox((0, 0), date_str, font=font_data)
     text_w_date = bbox_date[2] - bbox_date[0]
-    icon_size = 34
-    pad = 16
+    icon_size = 28 # Reduced from 34
+    pad = 12       # Reduced from 16
     total_w_date = icon_size + pad + text_w_date
     start_x_date = left_center_x - (total_w_date // 2)
     
-    # Draw Calendar Vector Icon
+    # Draw Calendar Vector Icon (Scaled down)
     ty_date = cy - (icon_size // 2)
     draw.rectangle([start_x_date, ty_date, start_x_date + icon_size, ty_date + icon_size], outline=(255, 255, 255), width=2)
     draw.line([start_x_date, ty_date + icon_size*0.35, start_x_date + icon_size, ty_date + icon_size*0.35], fill=(255, 255, 255), width=2)
-    draw.line([start_x_date + icon_size*0.25, ty_date - 4, start_x_date + icon_size*0.25, ty_date + 4], fill=(255, 255, 255), width=2)
-    draw.line([start_x_date + icon_size*0.75, ty_date - 4, start_x_date + icon_size*0.75, ty_date + 4], fill=(255, 255, 255), width=2)
+    draw.line([start_x_date + icon_size*0.25, ty_date - 3, start_x_date + icon_size*0.25, ty_date + 3], fill=(255, 255, 255), width=2)
+    draw.line([start_x_date + icon_size*0.75, ty_date - 3, start_x_date + icon_size*0.75, ty_date + 3], fill=(255, 255, 255), width=2)
     
     # Draw Date Text
     draw.text((start_x_date + icon_size + pad, cy), date_str, fill=(255, 255, 255), font=font_data, anchor="lm")
 
-    # 4. Right Section: Play Button and Sub Count
-    right_center_x = center_x + (box_width // 4) # Middle of the right box
+    # 4. Right Section: Play Button and Sub Count (Slightly smaller, tighter spacing)
+    right_center_x = center_x + (box_width // 4)
     
     bbox_sub = draw.textbbox((0, 0), sub_count, font=font_data)
     text_w_sub = bbox_sub[2] - bbox_sub[0]
     total_w_sub = icon_size + pad + text_w_sub
     start_x_sub = right_center_x - (total_w_sub // 2)
     
-    # Draw Play Vector Icon
+    # Draw Play Vector Icon (Scaled down)
     ty_sub = cy - (icon_size // 2)
     draw.polygon([(start_x_sub, ty_sub), (start_x_sub, ty_sub + icon_size), (start_x_sub + int(icon_size*0.86), cy)], fill=(255, 255, 255))
     
