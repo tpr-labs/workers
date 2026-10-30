@@ -125,5 +125,6 @@ def create_wallpaper():
     img.save("daily_lockscreen.png")
     print(f"Wallpaper generated. Quote: '{quote_str}', Counters: {date_str}, Sub count: {sub_count}")
 
+
 if __name__ == "__main__":
     create_wallpaper()
